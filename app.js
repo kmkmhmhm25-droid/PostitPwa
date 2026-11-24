@@ -971,4 +971,8 @@
     initEditModalEvents();
     applyBoardTransform();
     updateDeleteModeUI();
-    renderBoard
+    renderBoard();
+  }
+
+  document.addEventListener('DOMContentLoaded', init);
+})();
