@@ -1,1 +1,106 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="theme-color" content="#2c3e50" />
+  <title>ポストイットボード</title>
+  <link rel="manifest" href="./manifest.json" />
+  <link rel="icon" href="./icon.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="./style.css" />
+</head>
+<body>
+  <!-- ヘッダー / ツールバー -->
+  <header id="app-header">
+    <div class="header-left">
+      <button id="btn-add" class="tool-btn primary" type="button">＋ 追加</button>
+      <button id="btn-delete-mode" class="tool-btn" type="button">削除</button>
+      <button id="btn-undo" class="tool-btn hidden" type="button" disabled>↩ 戻る</button>
+    </div>
+    <div class="header-right">
+      <button id="btn-toggle-view" class="tool-btn" type="button">一覧</button>
+    </div>
+  </header>
 
+  <!-- 削除モード通知バナー -->
+  <div id="delete-banner" class="hidden">
+    削除モード中：タップで非表示（「削除」再押下で確定 / 選択中: <span id="delete-count">0</span>件）
+  </div>
+
+  <!-- 1. ボード画面 -->
+  <main id="board-view" class="view active">
+    <div id="board-viewport">
+      <div id="board-canvas">
+        <!-- 付箋要素が動的に挿入される -->
+      </div>
+    </div>
+    <button id="zoom-indicator" type="button" title="タップで100%に戻す">100%</button>
+  </main>
+
+  <!-- 2. 付箋一覧画面 -->
+  <main id="list-view" class="view hidden">
+    <div id="note-list"></div>
+    <p id="list-empty-msg" class="empty-msg hidden">付箋はまだありません。「＋ 追加」から作成してください。</p>
+  </main>
+
+  <!-- 3. 付箋編集モーダル（拡大表示） -->
+  <div id="edit-modal" class="modal hidden" role="dialog" aria-modal="true">
+    <div id="edit-modal-card" class="modal-card">
+      <!-- モーダル上部：モード切替・カラー選択・期限 -->
+      <div class="modal-toolbar">
+        <div class="mode-tabs">
+          <button id="btn-mode-text" class="tab-btn active" type="button">テキスト</button>
+          <button id="btn-mode-draw" class="tab-btn" type="button">手書き</button>
+        </div>
+        <div id="color-palette" class="color-palette" aria-label="付箋の色">
+          <button type="button" class="color-swatch" data-color="#fff59d" style="background:#fff59d" aria-label="黄"></button>
+          <button type="button" class="color-swatch" data-color="#f8bbd0" style="background:#f8bbd0" aria-label="ピンク"></button>
+          <button type="button" class="color-swatch" data-color="#b3e5fc" style="background:#b3e5fc" aria-label="水色"></button>
+          <button type="button" class="color-swatch" data-color="#c8e6c9" style="background:#c8e6c9" aria-label="黄緑"></button>
+          <button type="button" class="color-swatch" data-color="#ffe0b2" style="background:#ffe0b2" aria-label="オレンジ"></button>
+        </div>
+      </div>
+
+      <div class="meta-bar">
+        <label for="edit-due-date">期限:</label>
+        <input type="date" id="edit-due-date" />
+        <button id="btn-clear-date" type="button" class="small-btn">クリア</button>
+      </div>
+
+      <!-- テキスト入力エリア -->
+      <div id="text-editor-area" class="editor-area">
+        <textarea id="note-textarea" placeholder="メモを入力..."></textarea>
+      </div>
+
+      <!-- 手書き入力エリア -->
+      <div id="draw-editor-area" class="editor-area hidden">
+        <div class="draw-tools">
+          <div class="pen-colors">
+            <button type="button" class="pen-color active" data-pen="#222222" style="background:#222222" aria-label="黒"></button>
+            <button type="button" class="pen-color" data-pen="#d32f2f" style="background:#d32f2f" aria-label="赤"></button>
+            <button type="button" class="pen-color" data-pen="#1976d2" style="background:#1976d2" aria-label="青"></button>
+          </div>
+          <label class="pen-size-wrap">
+            太さ
+            <input type="range" id="pen-size" min="2" max="16" value="4" />
+          </label>
+          <button id="btn-eraser" type="button" class="small-btn">消しゴム</button>
+          <button id="btn-clear-canvas" type="button" class="small-btn danger">全消去</button>
+        </div>
+        <div class="canvas-wrapper">
+          <canvas id="draw-canvas"></canvas>
+        </div>
+      </div>
+
+      <!-- モーダル下部：キャンセル / 保存 -->
+      <div class="modal-footer">
+        <button id="btn-edit-cancel" type="button" class="footer-btn">キャンセル</button>
+        <button id="btn-edit-save" type="button" class="footer-btn primary">保存して閉じる</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="./db.js"></script>
+  <script src="./app.js"></script>
+</body>
+</html>
