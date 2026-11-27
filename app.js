@@ -9,13 +9,14 @@
   const NOTE_HEIGHT = 165;
   const MIN_SCALE = 0.4;
   const MAX_SCALE = 2.5;
-  const TAP_MOVE_THRESHOLD = 8;        // ドラッグとタップの境界(px)
-  const TWO_FINGER_TAP_MAX_MS = 350;   // 2本指タップの許容時間(ms)
-  const TWO_FINGER_TAP_MAX_MOVE = 14;  // 2本指タップの許容ブレ(px)
+  const TAP_MOVE_THRESHOLD = 8;
+  const TWO_FINGER_TAP_MAX_MS = 350;
+  const TWO_FINGER_TAP_MAX_MOVE = 14;
 
   const state = {
     notes: [],
     currentView: 'board', // 'board' | 'list'
+    listSort: 'due-asc',  // 'due-asc' | 'due-desc' | 'created-desc' | 'created-asc'
     isDeleteMode: false,
     maxZIndex: 1,
     addOffsetStep: 0,
@@ -26,12 +27,11 @@
     }
   };
 
-  // 編集モーダル用の一時状態
   const editor = {
     noteId: null,
-    mode: 'text',           // 'text' | 'handwriting'
+    mode: 'text',
     color: '#fff59d',
-    tempDrawingData: null,  // 編集中の手書き画像スナップショット
+    tempDrawingData: null,
     canvasReady: false,
     canvasCssWidth: 0,
     canvasCssHeight: 0,
@@ -48,7 +48,6 @@
    * DOM 要素参照
    * ========================================================= */
   const dom = {
-    // ヘッダー・モード通知
     btnAdd: document.getElementById('btn-add'),
     btnDeleteMode: document.getElementById('btn-delete-mode'),
     btnUndo: document.getElementById('btn-undo'),
@@ -56,18 +55,19 @@
     deleteBanner: document.getElementById('delete-banner'),
     deleteCount: document.getElementById('delete-count'),
 
-    // ボード画面
     boardView: document.getElementById('board-view'),
     boardViewport: document.getElementById('board-viewport'),
     boardCanvas: document.getElementById('board-canvas'),
     zoomIndicator: document.getElementById('zoom-indicator'),
 
-    // 一覧画面
     listView: document.getElementById('list-view'),
+    listSortSelect: document.getElementById('list-sort-select'),
+    btnExport: document.getElementById('btn-export'),
+    btnImport: document.getElementById('btn-import'),
+    importFileInput: document.getElementById('import-file-input'),
     noteList: document.getElementById('note-list'),
     listEmptyMsg: document.getElementById('list-empty-msg'),
 
-    // 編集モーダル
     editModal: document.getElementById('edit-modal'),
     editModalCard: document.getElementById('edit-modal-card'),
     btnModeText: document.getElementById('btn-mode-text'),
@@ -112,6 +112,16 @@
     const hh = String(d.getHours()).padStart(2, '0');
     const mm = String(d.getMinutes()).padStart(2, '0');
     return `${y}/${m}/${day} ${hh}:${mm}`;
+  }
+
+  function formatFileTimestamp() {
+    const d = new Date();
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    const hh = String(d.getHours()).padStart(2, '0');
+    const mm = String(d.getMinutes()).padStart(2, '0');
+    return `${y}${m}${day}-${hh}${mm}`;
   }
 
   function getPointerDistance(p1, p2) {
@@ -223,25 +233,53 @@
   }
 
   /* =========================================================
-   * 付箋一覧画面の描画
+   * 付箋一覧画面のソート・描画
    * ========================================================= */
+  function sortNotesForList(notes, sortType) {
+    const list = [...notes];
+
+    list.sort((a, b) => {
+      if (sortType === 'due-asc' || sortType === 'due-desc') {
+        const aHasDue = Boolean(a.dueDate);
+        const bHasDue = Boolean(b.dueDate);
+
+        // 期限未設定は常に末尾へ配置
+        if (aHasDue && !bHasDue) return -1;
+        if (!aHasDue && bHasDue) return 1;
+
+        if (aHasDue && bHasDue && a.dueDate !== b.dueDate) {
+          return sortType === 'due-asc'
+            ? a.dueDate.localeCompare(b.dueDate)
+            : b.dueDate.localeCompare(a.dueDate);
+        }
+        // 同じ期限（または両方未設定）の場合は作成日が新しい順
+        return new Date(b.createdAt) - new Date(a.createdAt);
+      }
+
+      if (sortType === 'created-asc') {
+        return new Date(a.createdAt) - new Date(b.createdAt);
+      }
+      // created-desc
+      return new Date(b.createdAt) - new Date(a.createdAt);
+    });
+
+    return list;
+  }
+
   function renderListView() {
     dom.noteList.innerHTML = '';
 
-    // 論理削除されていない付箋を作成日の新しい順に表示
-    const visibleNotes = state.notes
-      .filter((n) => !PostItDB.isStagedForDelete(n.id))
-      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    const activeNotes = state.notes.filter((n) => !PostItDB.isStagedForDelete(n.id));
+    const sortedNotes = sortNotesForList(activeNotes, state.listSort);
 
-    dom.listEmptyMsg.classList.toggle('hidden', visibleNotes.length > 0);
+    dom.listEmptyMsg.classList.toggle('hidden', sortedNotes.length > 0);
     const today = getTodayLocalISO();
 
-    for (const note of visibleNotes) {
+    for (const note of sortedNotes) {
       const card = document.createElement('article');
       card.className = 'list-card';
       card.style.backgroundColor = note.color || '#fff59d';
 
-      // 内容（手書き画像 or テキスト）
       if (note.mode === 'handwriting' && note.drawingData) {
         const img = document.createElement('img');
         img.className = 'list-card-thumb';
@@ -260,7 +298,6 @@
         card.appendChild(body);
       }
 
-      // メタ情報（期限・作成日）
       const meta = document.createElement('div');
       meta.className = 'list-card-meta';
 
@@ -283,9 +320,86 @@
       meta.appendChild(createdSpan);
       card.appendChild(meta);
 
-      // タップで編集モーダルを開く
       card.addEventListener('click', () => openEditModal(note.id));
       dom.noteList.appendChild(card);
+    }
+  }
+
+  /* =========================================================
+   * バックアップ（エクスポート）＆復元（インポート）
+   * ========================================================= */
+  async function handleExportBackup() {
+    try {
+      const allNotes = await PostItDB.getAllNotes();
+      if (allNotes.length === 0) {
+        alert('バックアップ対象の付箋がありません。');
+        return;
+      }
+
+      const payload = {
+        app: 'PostItPWA',
+        version: 1,
+        exportedAt: new Date().toISOString(),
+        notes: allNotes
+      };
+
+      const jsonText = JSON.stringify(payload, null, 2);
+      const blob = new Blob([jsonText], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `postit-backup-${formatFileTimestamp()}.json`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (err) {
+      console.error('エクスポートに失敗しました:', err);
+      alert('バックアップファイルの作成に失敗しました。');
+    }
+  }
+
+  async function handleImportFile(event) {
+    const file = event.target.files?.[0];
+    event.target.value = ''; // 同じファイルを再選択できるようリセット
+    if (!file) return;
+
+    try {
+      const text = await file.text();
+      const parsed = JSON.parse(text);
+      const importedNotes = Array.isArray(parsed) ? parsed : parsed?.notes;
+
+      if (!Array.isArray(importedNotes)) {
+        alert('有効なバックアップファイルではありません。');
+        return;
+      }
+
+      const validNotes = importedNotes.filter((n) => n && typeof n.id === 'string');
+      if (validNotes.length === 0) {
+        alert('復元可能な付箋データが見つかりませんでした。');
+        return;
+      }
+
+      const ok = confirm(
+        `${validNotes.length}件の付箋データを読み込みます。\n（同じIDの付箋は上書きされ、他の付箋は追加されます）`
+      );
+      if (!ok) return;
+
+      const savedCount = await PostItDB.bulkSaveNotes(validNotes);
+      state.notes = await PostItDB.getAllNotes();
+      state.maxZIndex = state.notes.reduce(
+        (max, n) => Math.max(max, n.zIndex || 1),
+        1
+      );
+
+      renderBoard();
+      renderListView();
+      alert(`${savedCount}件の付箋を復元しました。`);
+    } catch (err) {
+      console.error('インポートに失敗しました:', err);
+      alert('ファイルの読み込みに失敗しました。JSON形式を確認してください。');
     }
   }
 
@@ -493,7 +607,6 @@
       ptr.x = e.clientX;
       ptr.y = e.clientY;
 
-      // 1) 2本指ピンチズーム & パン
       if (activePointers.size === 2 && twoFinger) {
         const [p1, p2] = Array.from(activePointers.values());
         const rect = vp.getBoundingClientRect();
@@ -519,7 +632,6 @@
         return;
       }
 
-      // 2) 付箋のドラッグ移動
       if (noteDrag && noteDrag.pointerId === e.pointerId) {
         const dx = e.clientX - noteDrag.startClientX;
         const dy = e.clientY - noteDrag.startClientY;
@@ -552,7 +664,6 @@
         return;
       }
 
-      // 3) ボード背景のパン移動
       if (boardPan && boardPan.pointerId === e.pointerId) {
         const dx = e.clientX - boardPan.startClientX;
         const dy = e.clientY - boardPan.startClientY;
@@ -608,7 +719,6 @@
     vp.addEventListener('pointerup', handlePointerEnd);
     vp.addEventListener('pointercancel', handlePointerEnd);
 
-    // PCブラウザ確認用ホイールズーム
     vp.addEventListener('wheel', (e) => {
       e.preventDefault();
       const rect = vp.getBoundingClientRect();
@@ -662,9 +772,6 @@
     editor.tempDrawingData = null;
   }
 
-  /**
-   * 手書きキャンバスの解像度を初期化し、既存画像があればアスペクト比維持で復元する
-   */
   function setupDrawCanvas() {
     const canvas = dom.drawCanvas;
     const wrapper = canvas.parentElement;
@@ -689,7 +796,6 @@
     if (editor.tempDrawingData) {
       const img = new Image();
       img.onload = () => {
-        // モーダルがすでに閉じられていれば描画しない
         if (!editor.noteId || !editor.canvasReady) return;
         const scale = Math.min(cssW / img.width, cssH / img.height);
         const drawW = img.width * scale;
@@ -707,7 +813,6 @@
   }
 
   function setEditMode(mode) {
-    // 手書きモードから離脱する前に描画内容を退避
     if (editor.mode === 'handwriting' && mode !== 'handwriting' && editor.canvasReady) {
       captureCanvasSnapshot();
     }
@@ -721,7 +826,6 @@
     dom.drawEditorArea.classList.toggle('hidden', isText);
 
     if (!isText) {
-      // テキスト入力キーボードを閉じてからキャンバスサイズを確定
       dom.noteTextarea.blur();
       requestAnimationFrame(() => {
         setupDrawCanvas();
@@ -781,13 +885,11 @@
         state.notes[idx] = saved;
       }
 
-      // ボード側のDOM更新
       const el = getNoteElementById(saved.id);
       if (el) {
         updateNoteElement(el, saved);
       }
 
-      // 一覧画面表示中なら一覧を再描画
       if (state.currentView === 'list') {
         renderListView();
       }
@@ -838,7 +940,6 @@
       editor.lastX = pt.x;
       editor.lastY = pt.y;
 
-      // 単タップでも点が打てるように微小ストロークを描画
       const ctx = canvas.getContext('2d');
       applyStrokeStyle(ctx);
       ctx.beginPath();
@@ -966,6 +1067,16 @@
       switchView(state.currentView === 'board' ? 'list' : 'board');
     });
     dom.zoomIndicator.addEventListener('click', resetBoardZoom);
+
+    // 一覧のソート・バックアップ・復元イベント
+    dom.listSortSelect.value = state.listSort;
+    dom.listSortSelect.addEventListener('change', (e) => {
+      state.listSort = e.target.value;
+      renderListView();
+    });
+    dom.btnExport.addEventListener('click', handleExportBackup);
+    dom.btnImport.addEventListener('click', () => dom.importFileInput.click());
+    dom.importFileInput.addEventListener('change', handleImportFile);
 
     initBoardPointerEvents();
     initEditModalEvents();
