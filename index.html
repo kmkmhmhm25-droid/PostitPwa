@@ -39,6 +39,22 @@
 
   <!-- 2. 付箋一覧画面 -->
   <main id="list-view" class="view hidden">
+    <div class="list-controls">
+      <div class="sort-wrap">
+        <label for="list-sort-select">並び順:</label>
+        <select id="list-sort-select">
+          <option value="due-asc">期限が近い順</option>
+          <option value="due-desc">期限が遠い順</option>
+          <option value="created-desc">作成日が新しい順</option>
+          <option value="created-asc">作成日が古い順</option>
+        </select>
+      </div>
+      <div class="backup-actions">
+        <button id="btn-export" type="button" class="list-action-btn">バックアップ</button>
+        <button id="btn-import" type="button" class="list-action-btn secondary">復元</button>
+        <input type="file" id="import-file-input" accept=".json,application/json" class="hidden" />
+      </div>
+    </div>
     <div id="note-list"></div>
     <p id="list-empty-msg" class="empty-msg hidden">付箋はまだありません。「＋ 追加」から作成してください。</p>
   </main>
@@ -46,7 +62,13 @@
   <!-- 3. 付箋編集モーダル（拡大表示） -->
   <div id="edit-modal" class="modal hidden" role="dialog" aria-modal="true">
     <div id="edit-modal-card" class="modal-card">
-      <!-- モーダル上部：モード切替・カラー選択・期限 -->
+      <!-- モーダル最上部：キャンセル / 保存（キーボード表示時も常に操作可能） -->
+      <div class="modal-header">
+        <button id="btn-edit-cancel" type="button" class="header-action-btn">キャンセル</button>
+        <button id="btn-edit-save" type="button" class="header-action-btn primary">保存して閉じる</button>
+      </div>
+
+      <!-- モード切替・カラー選択 -->
       <div class="modal-toolbar">
         <div class="mode-tabs">
           <button id="btn-mode-text" class="tab-btn active" type="button">テキスト</button>
@@ -61,6 +83,7 @@
         </div>
       </div>
 
+      <!-- 期限設定 -->
       <div class="meta-bar">
         <label for="edit-due-date">期限:</label>
         <input type="date" id="edit-due-date" />
@@ -90,12 +113,6 @@
         <div class="canvas-wrapper">
           <canvas id="draw-canvas"></canvas>
         </div>
-      </div>
-
-      <!-- モーダル下部：キャンセル / 保存 -->
-      <div class="modal-footer">
-        <button id="btn-edit-cancel" type="button" class="footer-btn">キャンセル</button>
-        <button id="btn-edit-save" type="button" class="footer-btn primary">保存して閉じる</button>
       </div>
     </div>
   </div>
