@@ -8,12 +8,8 @@ const PostItDB = (() => {
   const STORE_NAME = 'notes';
 
   let dbInstance = null;
-  // 論理削除された付箋IDを一時保持するスタック（LIFO）
   let pendingDeleteStack = [];
 
-  /**
-   * IndexedDB を開く（初回のみストア作成）
-   */
   function openDB() {
     if (dbInstance) {
       return Promise.resolve(dbInstance);
@@ -42,30 +38,24 @@ const PostItDB = (() => {
     });
   }
 
-  /**
-   * 新規付箋の初期データオブジェクトを生成
-   */
   function createNoteData({ x = 40, y = 40, zIndex = 1, color = '#fff59d' } = {}) {
     const now = new Date().toISOString();
     const randomPart = Math.random().toString(36).slice(2, 6);
     return {
       id: `note_${Date.now()}_${randomPart}`,
-      mode: 'text',        // 'text' | 'handwriting'
+      mode: 'text',
       text: '',
-      drawingData: null,   // PNG DataURL
+      drawingData: null,
       x,
       y,
       zIndex,
       color,
-      dueDate: null,       // 'YYYY-MM-DD' または null
+      dueDate: null,
       createdAt: now,
       updatedAt: now
     };
   }
 
-  /**
-   * 保存済みの全付箋を取得
-   */
   async function getAllNotes() {
     const db = await openDB();
     return new Promise((resolve, reject) => {
@@ -78,9 +68,6 @@ const PostItDB = (() => {
     });
   }
 
-  /**
-   * 付箋を1件保存（新規作成・更新の両方に対応）
-   */
   async function saveNote(note) {
     const db = await openDB();
     const record = {
@@ -100,8 +87,43 @@ const PostItDB = (() => {
   }
 
   /**
-   * 指定されたID配列の付箋を IndexedDB から一括物理削除
+   * バックアップ復元用：複数付箋を一括保存（同IDは上書き、別IDは追加）
    */
+  async function bulkSaveNotes(notes) {
+    if (!Array.isArray(notes) || notes.length === 0) {
+      return 0;
+    }
+
+    const db = await openDB();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE_NAME, 'readwrite');
+      const store = tx.objectStore(STORE_NAME);
+      let count = 0;
+
+      for (const note of notes) {
+        if (!note || typeof note.id !== 'string') continue;
+        store.put({
+          id: note.id,
+          mode: note.mode === 'handwriting' ? 'handwriting' : 'text',
+          text: typeof note.text === 'string' ? note.text : '',
+          drawingData: typeof note.drawingData === 'string' ? note.drawingData : null,
+          x: Number.isFinite(note.x) ? note.x : 40,
+          y: Number.isFinite(note.y) ? note.y : 40,
+          zIndex: Number.isFinite(note.zIndex) ? note.zIndex : 1,
+          color: typeof note.color === 'string' ? note.color : '#fff59d',
+          dueDate: typeof note.dueDate === 'string' && note.dueDate ? note.dueDate : null,
+          createdAt: typeof note.createdAt === 'string' ? note.createdAt : new Date().toISOString(),
+          updatedAt: typeof note.updatedAt === 'string' ? note.updatedAt : new Date().toISOString()
+        });
+        count += 1;
+      }
+
+      tx.oncomplete = () => resolve(count);
+      tx.onerror = () => reject(tx.error);
+      tx.onabort = () => reject(tx.error || new Error('復元トランザクションが中断されました'));
+    });
+  }
+
   async function deleteNotesPhysical(ids) {
     if (!ids || ids.length === 0) {
       return [];
@@ -122,13 +144,6 @@ const PostItDB = (() => {
     });
   }
 
-  /* =========================================================
-   * 削除モード用：2段階削除（論理削除スタック / Undo / 確定）
-   * ========================================================= */
-
-  /**
-   * 論理削除：削除予定スタックにIDを積む（DBはまだ消さない）
-   */
   function stageDelete(id) {
     if (!pendingDeleteStack.includes(id)) {
       pendingDeleteStack.push(id);
@@ -136,9 +151,6 @@ const PostItDB = (() => {
     return pendingDeleteStack.length;
   }
 
-  /**
-   * 復元（Undo）：直前に論理削除したIDを取り出して返す
-   */
   function undoDelete() {
     if (pendingDeleteStack.length === 0) {
       return null;
@@ -146,23 +158,14 @@ const PostItDB = (() => {
     return pendingDeleteStack.pop();
   }
 
-  /**
-   * 指定IDが現在論理削除中かどうかを判定
-   */
   function isStagedForDelete(id) {
     return pendingDeleteStack.includes(id);
   }
 
-  /**
-   * 現在論理削除中の件数を取得
-   */
   function getStagedDeleteCount() {
     return pendingDeleteStack.length;
   }
 
-  /**
-   * 物理削除の確定：スタックに溜まった全IDを IndexedDB から完全削除してリセット
-   */
   async function commitPendingDeletes() {
     const targetIds = [...pendingDeleteStack];
     if (targetIds.length === 0) {
@@ -174,9 +177,6 @@ const PostItDB = (() => {
     return targetIds;
   }
 
-  /**
-   * 論理削除スタックを破棄（全復元したい場合用）
-   */
   function resetPendingDeletes() {
     const restoredIds = [...pendingDeleteStack];
     pendingDeleteStack = [];
@@ -188,6 +188,7 @@ const PostItDB = (() => {
     createNoteData,
     getAllNotes,
     saveNote,
+    bulkSaveNotes,
     deleteNotesPhysical,
     stageDelete,
     undoDelete,
