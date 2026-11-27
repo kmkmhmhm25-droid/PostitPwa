@@ -1,4 +1,4 @@
-const CACHE_NAME = 'postit-pwa-v3';
+const CACHE_NAME = 'postit-pwa-v4';
 const ASSETS = [
   './',
   './index.html',
@@ -27,7 +27,6 @@ self.addEventListener('activate', (event) => {
   self.clients.claim();
 });
 
-// ネットワーク優先（オフライン時のみキャッシュから返す）
 self.addEventListener('fetch', (event) => {
   event.respondWith(
     fetch(event.request)
