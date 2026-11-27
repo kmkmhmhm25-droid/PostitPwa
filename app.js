@@ -6,7 +6,7 @@
    * ========================================================= */
   const BOARD_SIZE = 3000;
   const NOTE_WIDTH = 165;
-  const NOTE_HEIGHT = 165;
+  const NOTE_HEIGHT = 120;
   const MIN_SCALE = 0.4;
   const MAX_SCALE = 2.5;
   const TAP_MOVE_THRESHOLD = 8;
